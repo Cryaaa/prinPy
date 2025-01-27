@@ -15,6 +15,7 @@ from keras.models import Model
 from keras.layers import Dense, Input, LeakyReLU
 from keras import optimizers
 import keras.backend as k
+from functools import partial
 
 # Preprocessing
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
@@ -35,12 +36,13 @@ class NLPCA(object):
     Attributes:
         None
     '''
-    def __init__(self):
+    def __init__(self, num_dim=3, nodes = 25, lr = .01):
         self.fit_points = None
-        self.model = None
+        self.model = self.create_model(num_dim, nodes = nodes, lr = lr)
         self.intermediate_layer_model = None
 
-    def fit(self, data, epochs = 500, nodes = 25, lr = .01, verbose = 0):
+
+    def fit(self, data, epochs = 500 , verbose = 0, weights = None):
         '''This method creates a model and will fit it to the given m x n 
         dimensional data.
 
@@ -59,20 +61,15 @@ class NLPCA(object):
         Returns:   
             None
         '''
-        num_dim = data.shape[1] # get number of dimensions for pts
-
-        # create models, base and intermediate
-        model = self.create_model(num_dim, nodes = nodes, lr = lr)
-        bname = model.layers[2].name        # bottle-neck layer name
+        bname = self.model.layers[2].name        # bottle-neck layer name
 
         # The itermediate model gets the output of the bottleneck layer, 
         # which acts as the projection layer.
-        self.intermediate_layer_model = Model(inputs=model.input,
-                                        outputs=model.get_layer(bname).output)
+        self.intermediate_layer_model = Model(inputs=self.model.input,
+                                        outputs=self.model.get_layer(bname).output)
 
         # Fit the model and set the instances self.model to model
-        model.fit(data, data, epochs = epochs, verbose = verbose)
-        self.model = model
+        self.model.fit(data, data, epochs = epochs, verbose = verbose,batch_size=128,sample_weight=weights)
 
         return
 
@@ -96,7 +93,7 @@ class NLPCA(object):
         self.fit_points = pts
         
         all = np.concatenate([pts, proj], axis = 1)
-        all_sorted = all[all[:,2].argsort()]
+        all_sorted = all[all[:,-1].argsort()]
         
         return proj, all_sorted
 
@@ -123,7 +120,7 @@ class NLPCA(object):
 
         # Connect and compile model:
         model = Model(inputs = input, outputs = output)
-        gradient_descent = optimizers.adam(learning_rate=lr)
+        gradient_descent = optimizers.Adam(learning_rate=lr)
         model.compile(loss = orth_dist, optimizer = gradient_descent)
 
         return model
